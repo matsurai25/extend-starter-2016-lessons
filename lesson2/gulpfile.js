@@ -6,7 +6,7 @@ const rimraf       = require('rimraf');
 const sequence     = require('run-sequence');
 const header       = require('gulp-header');
 
-const BUNDLENAME = 'bundle.jsx';
+const BUNDLENAME = 'addFadeInOut.jsx';
 const DIST = './dist/';
 
 gulp.task('default', () => {
