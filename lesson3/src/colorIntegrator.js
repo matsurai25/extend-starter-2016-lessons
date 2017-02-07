@@ -1,16 +1,17 @@
 class ColorIntegrator {
   constructor(thisPanel) {
     this.panel = thisPanel;
-    this.version = '1.0.0';
+    this.version = '1.0.3';
     this.compName = '_colorIntegrator';
     this.layerName = 'colors';
     this.commands = ['scan'];
     this.lists = [];
     this.icons = [];
     this.startButton = false;
+    this.startText = false;
     this.footer = false;
     this.scanButton = false;
-    this.updateButton = false;
+    this.reloadButton = false;
     this.panel.onResize = () => this._fitLayout();
     // this.panel.onActivate = () => this.start();
   }
@@ -19,6 +20,8 @@ class ColorIntegrator {
   start() {
     // コンポジションが存在しない
     if (this.startButton === false) {
+      this.startText = this.panel.add('statictext', this._getStartTextBounds(), 'start', {multiline:true});
+      this.startText.text = `Color Integrator\nv${this.version}\n@matsurai25`;
       this.startButton = this.panel.add('button', this._getStartButtonBounds(), 'start');
       this.startButton.onClick = () => {
         this.panel.remove(this.startButton);
@@ -26,49 +29,57 @@ class ColorIntegrator {
         if (this.getColorComp() === false) {
           this.init();
         } else {
-          this.updateUI();
+          this.reloadUI();
         }
       }
     } else {
-      this.updateUI();
+      this.reloadUI();
     }
   }
 
   // 何もない状態から始める
   init() {
     let comp = app.project.items.addComp(this.compName, 1920, 1080, 1, 10, 30);
-    let layer = comp.layers.addText(`#FFFFFF,#4ae7a0,#fc1c66`);
+    let layer = comp.layers.addText(`#FFFFFF`);
     layer.name = this.layerName;
-    this.updateUI();
+    this.reloadUI();
   }
 
   // UIを再構築
-  updateUI() {
+  reloadUI() {
     this.clearUI();
     const colorStr = this.getColorString();
-    const colors = String(this.getColorString()).split(',');
+    const colors = String(this.getColorString()).split(',').filter(color => color.match(/^#[0-9a-fA-F]{6}$/));;
     this._makeLists(colors);
     this._makeFooter(colorStr);
     this._makeScan();
-    this._makeUpdate();
+    this._makeReload();
   }
 
   // UIを削除
   clearUI() {
-    _.each(this.lists, (list,i) => {
-      this.panel.remove(list);
-      delete this.lists[i];
-    });
-    _.each(this.icons, (icon,i) => {
-      this.panel.remove(icon);
-      delete this.icons[i];
-    });
+    if(this.lists !== []){
+      _.each(this.lists, (list,i) => {
+        this.panel.remove(list);
+        delete this.lists[i];
+      });
+    }
+    if(this.icons !== []){
+      _.each(this.icons, (icon,i) => {
+        this.panel.remove(icon);
+        delete this.icons[i];
+      });
+    }
     this.lists = [];
     this.icons = [];
     if(this.footer !== false){
       this.panel.remove(this.footer);
     }
     this.footer = false;
+    if(this.startText !== false){
+      this.panel.remove(this.startText);
+    }
+    this.startText = false;
     if(this.startButton !== false){
       this.panel.remove(this.startButton);
     }
@@ -77,10 +88,10 @@ class ColorIntegrator {
       this.panel.remove(this.scanButton);
     }
     this.scanButton = false;
-    if(this.updateButton !== false){
-      this.panel.remove(this.updateButton);
+    if(this.reloadButton !== false){
+      this.panel.remove(this.reloadButton);
     }
-    this.updateButton = false;
+    this.reloadButton = false;
   }
 
   // 選択されたプロパティにエクスプレッションを追加
@@ -130,7 +141,7 @@ class ColorIntegrator {
   // コンポジションから色配列を読み出す
   getColorString() {
     var text = this.getColorComp().layer(this.layerName).text.sourceText.value;
-    return text;
+    return String(text).toUpperCase();
   }
 
   // コンポジションに色配列を書き出す
@@ -142,9 +153,12 @@ class ColorIntegrator {
   scan() {
     // 選択している要素によって処理を変更
     const activeComp = app.project.activeItem;
+    if(!activeComp){
+      alert('Please select Composition adn layer');
+      return;
+    }
     const selectedProperties = activeComp.selectedProperties;
     if(selectedProperties.length > 0){
-      alert('scan from selected properties.');
       app.beginUndoGroup("ColorIntegrator::scan");
       this._scanProperties(selectedProperties);
       app.endUndoGroup();
@@ -152,14 +166,9 @@ class ColorIntegrator {
     }
     const selectedLayers = activeComp.selectedLayers;
     if(selectedLayers.length > 0){
-      alert('scan from selected layers.');
       app.beginUndoGroup("ColorIntegrator::scan");
       this._scanLayers(selectedLayers);
       app.endUndoGroup();
-      return;
-    }
-    if(activeComp){
-      alert('scan from active composition.');
       return;
     }
     alert('No matches. Please select properties, layers or composition.');
@@ -183,7 +192,7 @@ class ColorIntegrator {
         return
       }
       const hex = this._rgbaToHex(property.value);
-      const colors = String(this.getColorString()).split(',');
+      const colors = String(this.getColorString()).split(',').filter(color => color.match(/^#[0-9a-fA-F]{6}$/));
       // 既に存在している色かを判定、その色のexpressionに置き換える
       if (colors.indexOf(hex) > -1) {
         property.expression = this._buildExp(colors.indexOf(hex));
@@ -193,7 +202,7 @@ class ColorIntegrator {
         this.footer.text = colors.join(',');
         this.setColorString(colors.join(','));
         property.expression = this._buildExp(colors.length-1);
-        this.updateUI();
+        this.reloadUI();
       }
     });
   }
@@ -226,8 +235,6 @@ class ColorIntegrator {
         props.push(layer.property("ADBE Root Vectors Group"));
       }
       props.push(layer.property("ADBE Effect Parade"));
-      $.writeln(layer.property("ADBE Effect Parade").matchName)
-
       return this._scanProperties(props);
     });
   }
@@ -235,6 +242,9 @@ class ColorIntegrator {
   // リスト部分を作成して追加
   _makeLists(colors) {
     _.each(colors, (color,i) => {
+      if (!color.match(/^#[0-9a-fA-F]{6}$/)) {
+        return;
+      }
       this.lists[i] = this.panel.add('button', this._getListBounds(i), color);
       this.icons[i] = this.panel.add('button', this._getIconBounds(i), '');
       this.icons[i].fillBrush = this.icons[i].graphics.newBrush(this.icons[i].graphics.BrushType.SOLID_COLOR, this._hexToRgba(color));
@@ -256,7 +266,7 @@ class ColorIntegrator {
         });
         this.footer.text = new_colors.join(',');
         this.setColorString(new_colors.join(','));
-        this.updateUI();
+        this.reloadUI();
         app.endUndoGroup();
         return;
       };
@@ -280,7 +290,7 @@ class ColorIntegrator {
       };
       app.beginUndoGroup("ColorIntegrator::changeFooter");
       this.setColorString(this.footer.text);
-      this.updateUI();
+      this.reloadUI();
       app.endUndoGroup();
     };
   }
@@ -293,16 +303,16 @@ class ColorIntegrator {
   }
 
   // scanボタンを作成
-  _makeUpdate() {
-    this.updateButton = this.panel.add('button',this._getUpdateButtonBounds());
-    this.updateButton.text = 'update';
-    this.updateButton.onClick = () => this.updateUI();
+  _makeReload() {
+    this.reloadButton = this.panel.add('button',this._getReloadButtonBounds());
+    this.reloadButton.text = 'reload';
+    this.reloadButton.onClick = () => this.reloadUI();
   }
 
   // カラーピッカーを起動してカラーコードを返す
   _colorPicker(color) {
     const picked_color = $.colorPicker(color.replace('#','0x'));
-    return '#'+picked_color.toString(16);
+    return '#'+picked_color.toString(16).toUpperCase();
   }
 
   // 要素の大きさをウィンドウにあわせる
@@ -322,8 +332,8 @@ class ColorIntegrator {
     if(this.scanButton !== false){
       this.scanButton.bounds = this._getScanButtonBounds();
     }
-    if(this.updateButton !== false){
-      this.updateButton.bounds = this._getUpdateButtonBounds();
+    if(this.reloadButton !== false){
+      this.reloadButton.bounds = this._getReloadButtonBounds();
     }
   }
 
@@ -336,13 +346,16 @@ class ColorIntegrator {
   _getFooterBounds() {
     return {x:0, y:this.panel.bounds.height-30, width:this.panel.bounds.width, height:30};
   }
+  _getStartTextBounds() {
+    return {x:10, y:10, width:this.panel.bounds.width-20, height:60};
+  }
   _getStartButtonBounds() {
-    return {x:10, y:10, width:this.panel.bounds.width-20, height:30};
+    return {x:10, y:70, width:this.panel.bounds.width-20, height:30};
   }
   _getScanButtonBounds() {
     return {x:0, y:this.panel.bounds.height-60, width:(this.panel.bounds.width)/2, height:30};
   }
-  _getUpdateButtonBounds() {
+  _getReloadButtonBounds() {
     return {x:(this.panel.bounds.width)/2, y:this.panel.bounds.height-60, width:(this.panel.bounds.width)/2, height:30};
   }
 
@@ -360,18 +373,22 @@ class ColorIntegrator {
     const r = ('00'+(rgba[0]*255).toString(16)).slice(-2);
     const g = ('00'+(rgba[1]*255).toString(16)).slice(-2);
     const b = ('00'+(rgba[2]*255).toString(16)).slice(-2);
-    return '#'+r+g+b;
+    return String('#'+r+g+b).toUpperCase();
   }
 
   // カラーコードが正しいかどうか
   _assertColorString(hextext) {
+    // 空文字列
+    if (hextext === '') {
+      return true;
+    }
     // すべて半角英数
     if (hextext.match(/[^0-9a-zA-Z,#]+/)) {
       alert(`invalid input`);
       return false;
     }
     // 形式が正しい
-    const colors = hextext.split(',');
+    const colors = hextext.split(',').filter(color => color.match(/^#[0-9a-fA-F]{6}$/));;
     for (let i = 0; i < colors.length; i++) {
       let color = colors[i];
       if (!color.match(/^#[0-9a-fA-F]{6}$/)) {
@@ -393,7 +410,7 @@ class ColorIntegrator {
       })(
         (function(x){
           var t = comp('_colorIntegrator').layer('colors').text.sourceText.split(',');
-          if(typeof t[x] === 'undefined'){
+          if(typeof t[x] === 'undefined' || t[x] === ''){
             return 'FFFFFF';
           }
           return t[x].replace('#','');
