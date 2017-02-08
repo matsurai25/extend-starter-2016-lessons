@@ -1,7 +1,7 @@
 class ColorIntegrator {
   constructor(thisPanel) {
     this.panel = thisPanel;
-    this.version = '1.0.3';
+    this.version = '1.0.4';
     this.compName = '_colorIntegrator';
     this.layerName = 'colors';
     this.commands = ['scan'];
@@ -312,7 +312,7 @@ class ColorIntegrator {
   // カラーピッカーを起動してカラーコードを返す
   _colorPicker(color) {
     const picked_color = $.colorPicker(color.replace('#','0x'));
-    return '#'+picked_color.toString(16).toUpperCase();
+    return '#'+('000000'+picked_color.toString(16).toUpperCase()).slice(-6);
   }
 
   // 要素の大きさをウィンドウにあわせる
